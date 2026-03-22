@@ -36,7 +36,7 @@ type TestResult = {
   error?: string
 }
 
-const STEP_EXCLUDED = ['id', 'humor_flavor_id', 'step_order', 'created_at', 'updated_at']
+const STEP_EXCLUDED = ['id', 'humor_flavor_id', 'order_by', 'created_datetime_utc', 'modified_datetime_utc', 'created_by_user_id', 'modified_by_user_id']
 
 export default function FlavorDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -82,7 +82,7 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
   }
 
   async function fetchSteps() {
-    const { data } = await supabase.from('humor_flavor_steps').select('*').eq('humor_flavor_id', flavorId).order('step_order')
+    const { data } = await supabase.from('humor_flavor_steps').select('*').eq('humor_flavor_id', flavorId).order('order_by')
     const list = data || []
     setSteps(list)
     if (list.length > 0) {
@@ -134,8 +134,8 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
     if (swapIdx < 0 || swapIdx >= steps.length) return
     const other = steps[swapIdx]
     setReordering(true)
-    await supabase.from('humor_flavor_steps').update({ step_order: other.step_order }).eq('id', step.id)
-    await supabase.from('humor_flavor_steps').update({ step_order: step.step_order }).eq('id', other.id)
+    await supabase.from('humor_flavor_steps').update({ order_by: other.order_by }).eq('id', step.id)
+    await supabase.from('humor_flavor_steps').update({ order_by: step.order_by }).eq('id', other.id)
     await fetchSteps()
     setReordering(false)
   }
@@ -156,10 +156,10 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
 
   async function handleCreateStep() {
     setSavingStep(true)
-    const maxOrder = steps.length > 0 ? Math.max(...steps.map(s => s.step_order)) : 0
+    const maxOrder = steps.length > 0 ? Math.max(...steps.map(s => s.order_by)) : 0
     const payload: Record<string, any> = {
       humor_flavor_id: flavorId,
-      step_order: maxOrder + 1,
+      order_by: maxOrder + 1,
     }
     stepCols.forEach(c => {
       const v = stepForm[c]
@@ -347,7 +347,7 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
                         <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 text-xs font-bold flex-shrink-0">
                           {idx + 1}
                         </span>
-                        <span className="text-xs text-gray-400">Step {step.step_order}</span>
+                        <span className="text-xs text-gray-400">Step {step.order_by}</span>
                       </div>
                       <div className="space-y-1">
                         {stepCols.map(col => step[col] != null && String(step[col]).trim() !== '' && (
@@ -500,7 +500,7 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
 
       {/* Add/Edit Step Modal */}
       {(showAddStep || editStep) && (
-        <Modal title={showAddStep ? 'Add Step' : `Edit Step ${editStep?.step_order}`} onClose={() => { setShowAddStep(false); setEditStep(null) }}>
+        <Modal title={showAddStep ? 'Add Step' : `Edit Step ${editStep?.order_by}`} onClose={() => { setShowAddStep(false); setEditStep(null) }}>
           <div className="space-y-4">
             {stepCols.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -538,7 +538,7 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
         <Modal title="Delete Step" onClose={() => setDeleteStep(null)}>
           <div className="space-y-4">
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-xl p-4 text-sm text-red-700 dark:text-red-400">
-              Delete Step {deleteStep.step_order}? This cannot be undone.
+              Delete Step {deleteStep.order_by}? This cannot be undone.
             </div>
             <div className="flex gap-3">
               <button onClick={() => setDeleteStep(null)} className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800">Cancel</button>
