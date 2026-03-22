@@ -6,7 +6,7 @@ import Link from 'next/link'
 
 type HumorFlavor = {
   id: number
-  name: string
+  slug: string
   description?: string
   [key: string]: any
 }
@@ -22,7 +22,7 @@ export default function FlavorsPage() {
   const [editFlavor, setEditFlavor] = useState<HumorFlavor | null>(null)
   const [deleteFlavor, setDeleteFlavor] = useState<HumorFlavor | null>(null)
 
-  const [formName, setFormName] = useState('')
+  const [formSlug, setFormSlug] = useState('')
   const [formDesc, setFormDesc] = useState('')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -55,19 +55,31 @@ export default function FlavorsPage() {
   useEffect(() => { fetchFlavors() }, [])
 
   function openAdd() {
-    setFormName(''); setFormDesc(''); setShowAdd(true)
+    setFormSlug(''); setFormDesc(''); setShowAdd(true)
   }
 
   function openEdit(f: HumorFlavor) {
-    setFormName(f.name || ''); setFormDesc(f.description || ''); setEditFlavor(f)
+    setFormSlug(f.slug || ''); setFormDesc(f.description || ''); setEditFlavor(f)
+  }
+
+  async function getProfileId() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return null
+    const { data: p } = await supabase.from('profiles').select('id').eq('user_id', user.id).maybeSingle()
+    return p?.id ?? user.id
   }
 
   async function handleCreate() {
-    if (!formName.trim()) return
+    if (!formSlug.trim()) return
     setSaving(true)
+    const profileId = await getProfileId()
+    const now = new Date().toISOString()
     const { error } = await supabase.from('humor_flavors').insert({
-      name: formName.trim(),
+      slug: formSlug.trim(),
       description: formDesc.trim() || null,
+      ...(profileId ? { created_by_user_id: profileId, modified_by_user_id: profileId } : {}),
+      created_datetime_utc: now,
+      modified_datetime_utc: now,
     })
     setSaving(false)
     if (error) { alert('Error: ' + error.message); return }
@@ -76,11 +88,14 @@ export default function FlavorsPage() {
   }
 
   async function handleUpdate() {
-    if (!editFlavor || !formName.trim()) return
+    if (!editFlavor || !formSlug.trim()) return
     setSaving(true)
+    const profileId = await getProfileId()
     const { error } = await supabase.from('humor_flavors').update({
-      name: formName.trim(),
+      slug: formSlug.trim(),
       description: formDesc.trim() || null,
+      modified_datetime_utc: new Date().toISOString(),
+      ...(profileId ? { modified_by_user_id: profileId } : {}),
     }).eq('id', editFlavor.id)
     setSaving(false)
     if (error) { alert('Error: ' + error.message); return }
@@ -91,7 +106,6 @@ export default function FlavorsPage() {
   async function handleDelete() {
     if (!deleteFlavor) return
     setDeleting(true)
-    // Delete steps first, then the flavor
     await supabase.from('humor_flavor_steps').delete().eq('humor_flavor_id', deleteFlavor.id)
     const { error } = await supabase.from('humor_flavors').delete().eq('id', deleteFlavor.id)
     setDeleting(false)
@@ -121,7 +135,7 @@ export default function FlavorsPage() {
               <thead>
                 <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
                   <th className="text-left px-5 py-3 font-semibold text-gray-600 dark:text-gray-400">ID</th>
-                  <th className="text-left px-5 py-3 font-semibold text-gray-600 dark:text-gray-400">Name</th>
+                  <th className="text-left px-5 py-3 font-semibold text-gray-600 dark:text-gray-400">Slug</th>
                   <th className="text-left px-5 py-3 font-semibold text-gray-600 dark:text-gray-400">Description</th>
                   <th className="text-center px-4 py-3 font-semibold text-gray-600 dark:text-gray-400">Steps</th>
                   <th className="text-center px-4 py-3 font-semibold text-gray-600 dark:text-gray-400">Actions</th>
@@ -133,7 +147,7 @@ export default function FlavorsPage() {
                     <td className="px-5 py-3 text-gray-400 text-xs">{f.id}</td>
                     <td className="px-5 py-3 font-medium text-gray-800 dark:text-white">
                       <Link href={`/tool/flavors/${f.id}`} className="hover:text-orange-500 transition-colors">
-                        {f.name}
+                        {f.slug}
                       </Link>
                     </td>
                     <td className="px-5 py-3 text-gray-500 dark:text-gray-400 max-w-xs">
@@ -168,9 +182,9 @@ export default function FlavorsPage() {
       {(showAdd || editFlavor) && (
         <Modal title={showAdd ? 'New Humor Flavor' : 'Edit Flavor'} onClose={() => { setShowAdd(false); setEditFlavor(null) }}>
           <div className="space-y-4">
-            <Field label="Name *">
-              <input type="text" value={formName} onChange={e => setFormName(e.target.value)}
-                placeholder="e.g. Deadpan Sarcasm"
+            <Field label="Slug *">
+              <input type="text" value={formSlug} onChange={e => setFormSlug(e.target.value)}
+                placeholder="e.g. deadpan-sarcasm"
                 className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-300" />
             </Field>
             <Field label="Description">
@@ -185,7 +199,7 @@ export default function FlavorsPage() {
                 Cancel
               </button>
               <button onClick={showAdd ? handleCreate : handleUpdate}
-                disabled={saving || !formName.trim()}
+                disabled={saving || !formSlug.trim()}
                 className="flex-1 px-4 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 disabled:opacity-50">
                 {saving ? 'Saving...' : showAdd ? 'Create Flavor' : 'Save Changes'}
               </button>
@@ -198,7 +212,7 @@ export default function FlavorsPage() {
         <Modal title="Delete Flavor" onClose={() => setDeleteFlavor(null)}>
           <div className="space-y-4">
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-xl p-4 text-sm text-red-700 dark:text-red-400">
-              Delete <strong>"{deleteFlavor.name}"</strong>? This will also delete all {stepCounts[deleteFlavor.id] ?? 0} steps. This cannot be undone.
+              Delete <strong>"{deleteFlavor.slug}"</strong>? This will also delete all {stepCounts[deleteFlavor.id] ?? 0} steps. This cannot be undone.
             </div>
             <div className="flex gap-3">
               <button onClick={() => setDeleteFlavor(null)} className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800">Cancel</button>

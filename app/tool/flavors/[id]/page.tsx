@@ -16,7 +16,7 @@ import {
 
 type HumorFlavor = {
   id: number
-  name: string
+  slug: string
   description?: string
   [key: string]: any
 }
@@ -71,7 +71,7 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
     const { data } = await supabase.from('humor_flavors').select('*').eq('id', flavorId).maybeSingle()
     if (data) {
       setFlavor(data)
-      setFlavorName(data.name || '')
+      setFlavorName(data.slug || '')
       setFlavorDesc(data.description || '')
     }
   }
@@ -112,8 +112,9 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
     if (!flavorName.trim()) return
     setSavingFlavor(true)
     const { error } = await supabase.from('humor_flavors').update({
-      name: flavorName.trim(),
+      slug: flavorName.trim(),
       description: flavorDesc.trim() || null,
+      modified_datetime_utc: new Date().toISOString(),
     }).eq('id', flavorId)
     setSavingFlavor(false)
     if (error) { alert('Error: ' + error.message); return }
@@ -261,7 +262,7 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
           ) : (
             <div>
               <div className="flex items-center gap-3">
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{flavor.name}</h1>
+                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{flavor.slug}</h1>
                 <button onClick={() => setEditingFlavor(true)} className="text-xs px-2.5 py-1 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                   Edit
                 </button>
