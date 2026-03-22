@@ -186,7 +186,16 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
     const cols = stepCols.length > 0 ? stepCols : DEFAULT_STEP_COLS
     if (stepCols.length === 0) setStepCols(DEFAULT_STEP_COLS)
     const emptyForm: Record<string, string> = {}
-    cols.forEach(c => { emptyForm[c] = '' })
+    const fkDefaults: Record<string, LookupRow[]> = {
+      llm_input_type_id: inputTypes,
+      llm_output_type_id: outputTypes,
+      llm_model_id: llmModels,
+      humor_flavor_step_type_id: stepTypes,
+    }
+    cols.forEach(c => {
+      const opts = fkDefaults[c]
+      emptyForm[c] = opts && opts.length > 0 ? String(opts[0].id) : ''
+    })
     setStepForm(emptyForm)
     setShowAddStep(true)
   }
@@ -199,6 +208,12 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
   }
 
   async function handleCreateStep() {
+    for (const col of FK_COLS) {
+      if (stepCols.includes(col) && !stepForm[col]) {
+        alert(`Please select a value for "${col.replace(/_id$/, '').replace(/_/g, ' ')}"`)
+        return
+      }
+    }
     setSavingStep(true)
     const formFields: Record<string, string> = {}
     stepCols.forEach(c => { formFields[c] = stepForm[c] ?? '' })
