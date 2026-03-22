@@ -35,17 +35,31 @@ type TestResult = {
 
 type LookupRow = { id: number; name: string }
 
-// Known FK columns that need dropdowns — used as fallback when no steps exist yet
-const DEFAULT_STEP_COLS = [
-  'humor_flavor_step_type_id',
+// Preferred display order for step form fields
+const STEP_COL_ORDER = [
+  'llm_temperature',
   'llm_input_type_id',
   'llm_output_type_id',
   'llm_model_id',
-  'llm_temperature',
+  'humor_flavor_step_type_id',
   'llm_system_prompt',
   'llm_user_prompt',
   'description',
 ]
+
+// Known FK columns that need dropdowns — used as fallback when no steps exist yet
+const DEFAULT_STEP_COLS = STEP_COL_ORDER
+
+function sortStepCols(cols: string[]): string[] {
+  return [...cols].sort((a, b) => {
+    const ai = STEP_COL_ORDER.indexOf(a)
+    const bi = STEP_COL_ORDER.indexOf(b)
+    if (ai === -1 && bi === -1) return 0
+    if (ai === -1) return 1
+    if (bi === -1) return -1
+    return ai - bi
+  })
+}
 
 const FK_COLS = ['llm_input_type_id', 'llm_output_type_id', 'llm_model_id', 'humor_flavor_step_type_id']
 
@@ -103,7 +117,7 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
     const list = data || []
     setSteps(list)
     if (list.length > 0) {
-      setStepCols(getEditableStepCols(Object.keys(list[0])))
+      setStepCols(sortStepCols(getEditableStepCols(Object.keys(list[0]))))
     }
   }
 
