@@ -33,6 +33,22 @@ type TestResult = {
   error?: string
 }
 
+type LookupRow = { id: number; name: string }
+
+// Known FK columns that need dropdowns — used as fallback when no steps exist yet
+const DEFAULT_STEP_COLS = [
+  'humor_flavor_step_type_id',
+  'llm_input_type_id',
+  'llm_output_type_id',
+  'llm_model_id',
+  'llm_temperature',
+  'llm_system_prompt',
+  'llm_user_prompt',
+  'description',
+]
+
+const FK_COLS = ['llm_input_type_id', 'llm_output_type_id', 'llm_model_id', 'humor_flavor_step_type_id']
+
 export default function FlavorDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const flavorId = Number(id)
@@ -44,6 +60,12 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
   const [images, setImages] = useState<Image[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'steps' | 'captions' | 'test'>('steps')
+
+  // Lookup tables for FK dropdowns
+  const [inputTypes, setInputTypes] = useState<LookupRow[]>([])
+  const [outputTypes, setOutputTypes] = useState<LookupRow[]>([])
+  const [llmModels, setLlmModels] = useState<LookupRow[]>([])
+  const [stepTypes, setStepTypes] = useState<LookupRow[]>([])
 
   // Edit flavor inline
   const [editingFlavor, setEditingFlavor] = useState(false)
@@ -95,10 +117,23 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
     setImages(data || [])
   }
 
+  async function fetchLookups() {
+    const [{ data: it }, { data: ot }, { data: lm }, { data: st }] = await Promise.all([
+      supabase.from('llm_input_types').select('id, name').order('id'),
+      supabase.from('llm_output_types').select('id, name').order('id'),
+      supabase.from('llm_models').select('id, name').order('id'),
+      supabase.from('humor_flavor_step_types').select('id, name').order('id'),
+    ])
+    setInputTypes(it || [])
+    setOutputTypes(ot || [])
+    setLlmModels(lm || [])
+    setStepTypes(st || [])
+  }
+
   useEffect(() => {
     async function init() {
       setLoading(true)
-      await Promise.all([fetchFlavor(), fetchSteps(), fetchImages()])
+      await Promise.all([fetchFlavor(), fetchSteps(), fetchImages(), fetchLookups()])
       setLoading(false)
     }
     init()
@@ -134,8 +169,10 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
   }
 
   function openAddStep() {
+    const cols = stepCols.length > 0 ? stepCols : DEFAULT_STEP_COLS
+    if (stepCols.length === 0) setStepCols(DEFAULT_STEP_COLS)
     const emptyForm: Record<string, string> = {}
-    stepCols.forEach(c => { emptyForm[c] = '' })
+    cols.forEach(c => { emptyForm[c] = '' })
     setStepForm(emptyForm)
     setShowAddStep(true)
   }
@@ -479,23 +516,64 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
       {(showAddStep || editStep) && (
         <Modal title={showAddStep ? 'Add Step' : `Edit Step ${editStep?.order_by}`} onClose={() => { setShowAddStep(false); setEditStep(null) }}>
           <div className="space-y-4">
-            {stepCols.length === 0 ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Could not detect step columns. Please add a step manually via the database first so columns can be discovered.
-              </p>
-            ) : (
-              stepCols.map(col => (
-                <Field key={col} label={col.replace(/_/g, ' ')}>
+            {stepCols.map(col => {
+              const inputClass = "w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-300"
+              const label = col.replace(/_id$/, '').replace(/_/g, ' ')
+
+              // FK dropdown fields
+              const lookupMap: Record<string, LookupRow[]> = {
+                llm_input_type_id: inputTypes,
+                llm_output_type_id: outputTypes,
+                llm_model_id: llmModels,
+                humor_flavor_step_type_id: stepTypes,
+              }
+              if (FK_COLS.includes(col)) {
+                const opts = lookupMap[col] || []
+                return (
+                  <Field key={col} label={label}>
+                    <select
+                      value={stepForm[col] || ''}
+                      onChange={e => setStepForm(prev => ({ ...prev, [col]: e.target.value }))}
+                      className={inputClass}>
+                      <option value="">— select —</option>
+                      {opts.map(o => (
+                        <option key={o.id} value={String(o.id)}>{o.name}</option>
+                      ))}
+                    </select>
+                  </Field>
+                )
+              }
+
+              // Temperature: number input
+              if (col === 'llm_temperature') {
+                return (
+                  <Field key={col} label={label}>
+                    <input
+                      type="number"
+                      min="0" max="2" step="0.1"
+                      value={stepForm[col] || ''}
+                      onChange={e => setStepForm(prev => ({ ...prev, [col]: e.target.value }))}
+                      placeholder="0.0 – 2.0 (optional)"
+                      className={inputClass}
+                    />
+                  </Field>
+                )
+              }
+
+              // Large textareas for prompt fields
+              const isLong = col.toLowerCase().includes('prompt') || col.toLowerCase().includes('instruction') || col.toLowerCase().includes('content')
+              return (
+                <Field key={col} label={label}>
                   <textarea
                     value={stepForm[col] || ''}
                     onChange={e => setStepForm(prev => ({ ...prev, [col]: e.target.value }))}
-                    rows={col.toLowerCase().includes('prompt') || col.toLowerCase().includes('instruction') || col.toLowerCase().includes('content') ? 6 : 2}
-                    placeholder={`Enter ${col.replace(/_/g, ' ')}...`}
-                    className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-300 resize-none"
+                    rows={isLong ? 6 : 2}
+                    placeholder={`Enter ${label}...`}
+                    className={`${inputClass} resize-none`}
                   />
                 </Field>
-              ))
-            )}
+              )
+            })}
             <div className="flex gap-3 pt-2">
               <button onClick={() => { setShowAddStep(false); setEditStep(null) }}
                 className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800">
