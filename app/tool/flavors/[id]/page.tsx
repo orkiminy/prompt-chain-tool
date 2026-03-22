@@ -3,25 +3,22 @@
 import { useEffect, useState, use } from 'react'
 import { createClient } from '@/utils/supabase-browser'
 import Link from 'next/link'
+import {
+  buildStepPayload,
+  computeReorderSwap,
+  filterImages,
+  getEditableStepCols,
+  getNextOrderBy,
+  STEP_EXCLUDED,
+  type Step,
+  type Image,
+} from '@/utils/flavor-logic'
 
 type HumorFlavor = {
   id: number
   name: string
   description?: string
   [key: string]: any
-}
-
-type Step = {
-  id: number
-  humor_flavor_id: number
-  step_order: number
-  [key: string]: any
-}
-
-type Image = {
-  id: string
-  url: string
-  image_description: string | null
 }
 
 type Caption = {
@@ -35,8 +32,6 @@ type TestResult = {
   captions: Caption[]
   error?: string
 }
-
-const STEP_EXCLUDED = ['id', 'humor_flavor_id', 'order_by', 'created_datetime_utc', 'modified_datetime_utc', 'created_by_user_id', 'modified_by_user_id']
 
 export default function FlavorDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -86,8 +81,7 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
     const list = data || []
     setSteps(list)
     if (list.length > 0) {
-      const cols = Object.keys(list[0]).filter(c => !STEP_EXCLUDED.includes(c))
-      setStepCols(cols)
+      setStepCols(getEditableStepCols(Object.keys(list[0])))
     }
   }
 
@@ -129,13 +123,11 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
 
   // Step reordering
   async function moveStep(step: Step, direction: 'up' | 'down') {
-    const idx = steps.findIndex(s => s.id === step.id)
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
-    if (swapIdx < 0 || swapIdx >= steps.length) return
-    const other = steps[swapIdx]
+    const swap = computeReorderSwap(steps, step.id, direction)
+    if (!swap) return
     setReordering(true)
-    await supabase.from('humor_flavor_steps').update({ order_by: other.order_by }).eq('id', step.id)
-    await supabase.from('humor_flavor_steps').update({ order_by: step.order_by }).eq('id', other.id)
+    await supabase.from('humor_flavor_steps').update({ order_by: swap[0].order_by }).eq('id', swap[0].id)
+    await supabase.from('humor_flavor_steps').update({ order_by: swap[1].order_by }).eq('id', swap[1].id)
     await fetchSteps()
     setReordering(false)
   }
@@ -156,19 +148,13 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
 
   async function handleCreateStep() {
     setSavingStep(true)
-    const maxOrder = steps.length > 0 ? Math.max(...steps.map(s => s.order_by)) : 0
-    const payload: Record<string, any> = {
+    const formFields: Record<string, string> = {}
+    stepCols.forEach(c => { formFields[c] = stepForm[c] ?? '' })
+    const payload = {
       humor_flavor_id: flavorId,
-      order_by: maxOrder + 1,
+      order_by: getNextOrderBy(steps),
+      ...buildStepPayload(formFields),
     }
-    stepCols.forEach(c => {
-      const v = stepForm[c]
-      if (v === '') payload[c] = null
-      else if (v === 'true') payload[c] = true
-      else if (v === 'false') payload[c] = false
-      else if (!isNaN(Number(v)) && v !== '') payload[c] = Number(v)
-      else payload[c] = v
-    })
     const { error } = await supabase.from('humor_flavor_steps').insert(payload)
     setSavingStep(false)
     if (error) { alert('Error: ' + error.message); return }
@@ -179,15 +165,9 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
   async function handleUpdateStep() {
     if (!editStep) return
     setSavingStep(true)
-    const payload: Record<string, any> = {}
-    stepCols.forEach(c => {
-      const v = stepForm[c]
-      if (v === '') payload[c] = null
-      else if (v === 'true') payload[c] = true
-      else if (v === 'false') payload[c] = false
-      else if (!isNaN(Number(v)) && v !== '') payload[c] = Number(v)
-      else payload[c] = v
-    })
+    const formFields: Record<string, string> = {}
+    stepCols.forEach(c => { formFields[c] = stepForm[c] ?? '' })
+    const payload = buildStepPayload(formFields)
     const { error } = await supabase.from('humor_flavor_steps').update(payload).eq('id', editStep.id)
     setSavingStep(false)
     if (error) { alert('Error: ' + error.message); return }
@@ -252,11 +232,7 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
     setTesting(false)
   }
 
-  const filteredImages = images.filter(img =>
-    !imageSearch ||
-    img.url.toLowerCase().includes(imageSearch.toLowerCase()) ||
-    (img.image_description || '').toLowerCase().includes(imageSearch.toLowerCase())
-  )
+  const filteredImages = filterImages(images, imageSearch)
 
   if (loading) return <div className="p-8 text-gray-400">Loading...</div>
   if (!flavor) return <div className="p-8 text-red-500">Flavor not found.</div>
