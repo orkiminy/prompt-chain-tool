@@ -35,6 +35,41 @@ type TestResult = {
 
 type LookupRow = { id: number; name: string }
 
+const FALLBACK_INPUT_TYPES: LookupRow[] = [
+  { id: 1, name: 'image-and-text' },
+  { id: 2, name: 'text-only' },
+]
+const FALLBACK_OUTPUT_TYPES: LookupRow[] = [
+  { id: 1, name: 'string' },
+  { id: 2, name: 'array' },
+]
+const FALLBACK_STEP_TYPES: LookupRow[] = [
+  { id: 1, name: 'celebrity-recognition' },
+  { id: 2, name: 'image-description' },
+  { id: 3, name: 'general' },
+]
+const FALLBACK_LLM_MODELS: LookupRow[] = [
+  { id: 1,  name: 'GPT-4.1' },
+  { id: 2,  name: 'GPT-4.1 mini' },
+  { id: 3,  name: 'GPT-4.1 nano' },
+  { id: 4,  name: 'GPT-4.5' },
+  { id: 5,  name: 'GPT-4o' },
+  { id: 6,  name: 'GPT-4o mini' },
+  { id: 7,  name: 'o1' },
+  { id: 8,  name: 'o3' },
+  { id: 9,  name: 'o3 mini' },
+  { id: 10, name: 'o4 mini' },
+  { id: 11, name: 'Claude 3.5 Sonnet' },
+  { id: 12, name: 'Claude 3.7 Sonnet' },
+  { id: 13, name: 'Gemini 2.5 Pro' },
+  { id: 14, name: 'Gemini 2.5 Flash' },
+  { id: 15, name: 'Gemini 2.0 Flash' },
+  { id: 16, name: 'Gemini 2.0 Flash Lite' },
+  { id: 17, name: 'Gemini 1.5 Pro' },
+  { id: 18, name: 'Gemini 1.5 Flash' },
+  { id: 19, name: 'Gemini 1.5 Flash 8B' },
+]
+
 // Preferred display order for step form fields
 const STEP_COL_ORDER = [
   'llm_temperature',
@@ -75,11 +110,11 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'steps' | 'captions' | 'test'>('steps')
 
-  // Lookup tables for FK dropdowns
-  const [inputTypes, setInputTypes] = useState<LookupRow[]>([])
-  const [outputTypes, setOutputTypes] = useState<LookupRow[]>([])
-  const [llmModels, setLlmModels] = useState<LookupRow[]>([])
-  const [stepTypes, setStepTypes] = useState<LookupRow[]>([])
+  // Lookup tables for FK dropdowns (start with fallbacks so dropdowns are never empty)
+  const [inputTypes, setInputTypes] = useState<LookupRow[]>(FALLBACK_INPUT_TYPES)
+  const [outputTypes, setOutputTypes] = useState<LookupRow[]>(FALLBACK_OUTPUT_TYPES)
+  const [llmModels, setLlmModels] = useState<LookupRow[]>(FALLBACK_LLM_MODELS)
+  const [stepTypes, setStepTypes] = useState<LookupRow[]>(FALLBACK_STEP_TYPES)
 
   // Edit flavor inline
   const [editingFlavor, setEditingFlavor] = useState(false)
@@ -138,10 +173,10 @@ export default function FlavorDetailPage({ params }: { params: Promise<{ id: str
       supabase.from('llm_models').select('id, name').order('id'),
       supabase.from('humor_flavor_step_types').select('id, name').order('id'),
     ])
-    setInputTypes(it || [])
-    setOutputTypes(ot || [])
-    setLlmModels(lm || [])
-    setStepTypes(st || [])
+    if (it && it.length > 0) setInputTypes(it)
+    if (ot && ot.length > 0) setOutputTypes(ot)
+    if (lm && lm.length > 0) setLlmModels(lm)
+    if (st && st.length > 0) setStepTypes(st)
   }
 
   useEffect(() => {
