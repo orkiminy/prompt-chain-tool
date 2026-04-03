@@ -62,22 +62,13 @@ export default function FlavorsPage() {
     setFormSlug(f.slug || ''); setFormDesc(f.description || ''); setEditFlavor(f)
   }
 
-  async function getProfileId() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return null
-    const { data: p } = await supabase.from('profiles').select('id').eq('user_id', user.id).maybeSingle()
-    return p?.id ?? user.id
-  }
-
   async function handleCreate() {
     if (!formSlug.trim()) return
     setSaving(true)
-    const profileId = await getProfileId()
     const now = new Date().toISOString()
     const { error } = await supabase.from('humor_flavors').insert({
       slug: formSlug.trim(),
       description: formDesc.trim() || null,
-      ...(profileId ? { created_by_user_id: profileId, modified_by_user_id: profileId } : {}),
       created_datetime_utc: now,
       modified_datetime_utc: now,
     })
@@ -90,12 +81,10 @@ export default function FlavorsPage() {
   async function handleUpdate() {
     if (!editFlavor || !formSlug.trim()) return
     setSaving(true)
-    const profileId = await getProfileId()
     const { error } = await supabase.from('humor_flavors').update({
       slug: formSlug.trim(),
       description: formDesc.trim() || null,
       modified_datetime_utc: new Date().toISOString(),
-      ...(profileId ? { modified_by_user_id: profileId } : {}),
     }).eq('id', editFlavor.id)
     setSaving(false)
     if (error) { alert('Error: ' + error.message); return }
