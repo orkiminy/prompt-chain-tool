@@ -30,7 +30,7 @@ export default function FlavorsPage() {
   async function fetchFlavors() {
     setLoading(true)
     const [{ data }, { count }] = await Promise.all([
-      supabase.from('humor_flavors').select('*').order('id'),
+      supabase.from('humor_flavors').select('*').order('id', { ascending: false }),
       supabase.from('humor_flavors').select('*', { count: 'exact', head: true }),
     ])
     setTotalCount(count ?? 0)
@@ -65,12 +65,9 @@ export default function FlavorsPage() {
   async function handleCreate() {
     if (!formSlug.trim()) return
     setSaving(true)
-    const now = new Date().toISOString()
     const { error } = await supabase.from('humor_flavors').insert({
       slug: formSlug.trim(),
       description: formDesc.trim() || null,
-      created_datetime_utc: now,
-      modified_datetime_utc: now,
     })
     setSaving(false)
     if (error) { alert('Error: ' + error.message); return }
@@ -84,7 +81,6 @@ export default function FlavorsPage() {
     const { error } = await supabase.from('humor_flavors').update({
       slug: formSlug.trim(),
       description: formDesc.trim() || null,
-      modified_datetime_utc: new Date().toISOString(),
     }).eq('id', editFlavor.id)
     setSaving(false)
     if (error) { alert('Error: ' + error.message); return }
@@ -173,7 +169,7 @@ export default function FlavorsPage() {
           <div className="space-y-4">
             <Field label="Slug *">
               <input type="text" value={formSlug} onChange={e => setFormSlug(e.target.value)}
-                placeholder="e.g. deadpan-sarcasm"
+                placeholder="e.g. ai-world-takeover"
                 className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-300" />
             </Field>
             <Field label="Description">
@@ -201,7 +197,7 @@ export default function FlavorsPage() {
         <Modal title="Delete Flavor" onClose={() => setDeleteFlavor(null)}>
           <div className="space-y-4">
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-xl p-4 text-sm text-red-700 dark:text-red-400">
-              Delete <strong>"{deleteFlavor.slug}"</strong>? This will also delete all {stepCounts[deleteFlavor.id] ?? 0} steps. This cannot be undone.
+              Delete <strong>&quot;{deleteFlavor.slug}&quot;</strong>? This will also delete all {stepCounts[deleteFlavor.id] ?? 0} steps. This cannot be undone.
             </div>
             <div className="flex gap-3">
               <button onClick={() => setDeleteFlavor(null)} className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800">Cancel</button>

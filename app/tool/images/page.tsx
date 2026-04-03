@@ -32,7 +32,7 @@ export default function ImagesPage() {
   async function fetchImages() {
     setLoading(true)
     const [{ data }, { count }] = await Promise.all([
-      supabase.from('images').select('id, url, image_description').order('created_datetime_utc', { ascending: false, nullsFirst: false }).limit(500),
+      supabase.from('images').select('id, url, image_description').order('id', { ascending: false }).limit(500),
       supabase.from('images').select('*', { count: 'exact', head: true }),
     ])
     setTotalCount(count ?? 0)
@@ -88,15 +88,12 @@ export default function ImagesPage() {
         let profileId = user.id
         const { data: p2 } = await supabase.from('profiles').select('id').eq('user_id', user.id).maybeSingle()
         if (p2) profileId = p2.id
-        const now = new Date().toISOString()
         const { error: insertError } = await supabase.from('images').insert({
           url: cdnUrl,
           image_description: formDesc.trim() || null,
           profile_id: profileId,
           is_public: true,
           is_common_use: true,
-          created_datetime_utc: now,
-          modified_datetime_utc: now,
         })
         if (insertError) throw new Error(insertError.message)
       } else {
@@ -105,15 +102,12 @@ export default function ImagesPage() {
         let profileId = user.id
         const { data: p2 } = await supabase.from('profiles').select('id').eq('user_id', user.id).maybeSingle()
         if (p2) profileId = p2.id
-        const now = new Date().toISOString()
         const { error } = await supabase.from('images').insert({
           url: formUrl.trim(),
           image_description: formDesc.trim() || null,
           profile_id: profileId,
           is_public: true,
           is_common_use: true,
-          created_datetime_utc: now,
-          modified_datetime_utc: now,
         })
         if (error) throw new Error(error.message)
       }
@@ -134,7 +128,6 @@ export default function ImagesPage() {
     const { error } = await supabase.from('images').update({
       url: formUrl.trim(),
       image_description: formDesc.trim() || null,
-      modified_datetime_utc: new Date().toISOString(),
     }).eq('id', editImage.id)
     setSaving(false)
     if (error) { alert('Error: ' + error.message); return }
