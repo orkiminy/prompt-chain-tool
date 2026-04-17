@@ -21,11 +21,15 @@ export default function FlavorsPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [editFlavor, setEditFlavor] = useState<HumorFlavor | null>(null)
   const [deleteFlavor, setDeleteFlavor] = useState<HumorFlavor | null>(null)
+  const [duplicateFlavor, setDuplicateFlavor] = useState<HumorFlavor | null>(null)
 
   const [formSlug, setFormSlug] = useState('')
   const [formDesc, setFormDesc] = useState('')
+  const [dupSlug, setDupSlug] = useState('')
+  const [dupError, setDupError] = useState('')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [duplicating, setDuplicating] = useState(false)
 
   async function fetchFlavors() {
     setLoading(true)
@@ -99,6 +103,71 @@ export default function FlavorsPage() {
     await fetchFlavors()
   }
 
+  function openDuplicate(f: HumorFlavor) {
+    setDupSlug(`${f.slug}-copy`)
+    setDupError('')
+    setDuplicateFlavor(f)
+  }
+
+  async function handleDuplicate() {
+    if (!duplicateFlavor) return
+    const newSlug = dupSlug.trim()
+    if (!newSlug) { setDupError('Slug is required'); return }
+
+    setDuplicating(true)
+    setDupError('')
+
+    // Check uniqueness of the new slug
+    const { data: existing, error: checkErr } = await supabase
+      .from('humor_flavors')
+      .select('id')
+      .eq('slug', newSlug)
+      .maybeSingle()
+    if (checkErr) { setDuplicating(false); setDupError(checkErr.message); return }
+    if (existing) { setDuplicating(false); setDupError('A flavor with this slug already exists'); return }
+
+    // Create the new flavor, copying the description
+    const { data: inserted, error: insertErr } = await supabase
+      .from('humor_flavors')
+      .insert({ slug: newSlug, description: duplicateFlavor.description ?? null })
+      .select('id')
+      .single()
+    if (insertErr || !inserted) { setDuplicating(false); setDupError(insertErr?.message || 'Failed to create flavor'); return }
+
+    // Fetch all steps of the source flavor
+    const { data: srcSteps, error: stepsErr } = await supabase
+      .from('humor_flavor_steps')
+      .select('*')
+      .eq('humor_flavor_id', duplicateFlavor.id)
+      .order('order_by')
+    if (stepsErr) { setDuplicating(false); setDupError(stepsErr.message); return }
+
+    // Copy steps, stripping system-managed columns and rewriting FK
+    if (srcSteps && srcSteps.length > 0) {
+      const EXCLUDED = new Set(['id', 'created_datetime_utc', 'modified_datetime_utc', 'created_by_user_id', 'modified_by_user_id'])
+      const newSteps = srcSteps.map(s => {
+        const copy: Record<string, any> = {}
+        for (const [k, v] of Object.entries(s)) {
+          if (!EXCLUDED.has(k)) copy[k] = v
+        }
+        copy.humor_flavor_id = inserted.id
+        return copy
+      })
+      const { error: copyErr } = await supabase.from('humor_flavor_steps').insert(newSteps)
+      if (copyErr) {
+        // Roll back the flavor so the user isn't left with a half-duplicated item
+        await supabase.from('humor_flavors').delete().eq('id', inserted.id)
+        setDuplicating(false)
+        setDupError('Failed to copy steps: ' + copyErr.message)
+        return
+      }
+    }
+
+    setDuplicating(false)
+    setDuplicateFlavor(null)
+    await fetchFlavors()
+  }
+
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-1">
@@ -151,6 +220,9 @@ export default function FlavorsPage() {
                         <button onClick={() => openEdit(f)} className="text-xs px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                           Edit
                         </button>
+                        <button onClick={() => openDuplicate(f)} className="text-xs px-3 py-1.5 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors">
+                          Duplicate
+                        </button>
                         <button onClick={() => setDeleteFlavor(f)} className="text-xs px-3 py-1.5 border border-red-100 dark:border-red-900 text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
                           Delete
                         </button>
@@ -187,6 +259,30 @@ export default function FlavorsPage() {
                 disabled={saving || !formSlug.trim()}
                 className="flex-1 px-4 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 disabled:opacity-50">
                 {saving ? 'Saving...' : showAdd ? 'Create Flavor' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {duplicateFlavor && (
+        <Modal title="Duplicate Flavor" onClose={() => setDuplicateFlavor(null)}>
+          <div className="space-y-4">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl p-4 text-sm text-blue-700 dark:text-blue-400">
+              Copying <strong>&quot;{duplicateFlavor.slug}&quot;</strong> and its {stepCounts[duplicateFlavor.id] ?? 0} step{(stepCounts[duplicateFlavor.id] ?? 0) === 1 ? '' : 's'}. Pick a new unique slug for the copy.
+            </div>
+            <Field label="New Slug *">
+              <input type="text" value={dupSlug}
+                onChange={e => { setDupSlug(e.target.value); setDupError('') }}
+                placeholder="e.g. ai-world-takeover-v2"
+                className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-300" />
+            </Field>
+            {dupError && <p className="text-xs text-red-500">{dupError}</p>}
+            <div className="flex gap-3">
+              <button onClick={() => setDuplicateFlavor(null)} className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800">Cancel</button>
+              <button onClick={handleDuplicate} disabled={duplicating || !dupSlug.trim()}
+                className="flex-1 px-4 py-2.5 bg-blue-500 text-white rounded-xl text-sm font-semibold hover:bg-blue-600 disabled:opacity-50">
+                {duplicating ? 'Duplicating...' : 'Duplicate'}
               </button>
             </div>
           </div>
